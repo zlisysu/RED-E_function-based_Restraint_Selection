@@ -7,6 +7,7 @@ import numpy as np
 import timeit
 import pandas as pd
 import os
+from scipy.optimize import minimize
 from .gen_plumed import Gen_plumed_input
 
 class RED_FIT():
@@ -349,7 +350,13 @@ class Restrain_Data():
         self.tor2_ary: np.array([]) 
             The array that stores all the data of phiB(TORSION ATOMS=rec2,rec1,lig1,lig2) in unit of Radian.
         self.tor3_ary: np.array([])
-            The array that stores all the data of phiC(TORSION ATOMS=rec1,lig1,lig2,lig3) in unit of Radian.       
+            The array that stores all the data of phiC(TORSION ATOMS=rec1,lig1,lig2,lig3) in unit of Radian.    
+        self.dist_mean = self.dist_ary.mean()  in unit of nm
+        self.ang1_mean = self.ang1_ary.mean()  in unit of Radian
+        self.ang2_mean = self.ang2_ary.mean()  in unit of Radian
+        self.tor1_mean = self.cal_dihedral_mean(self.tor1_ary, 'radian', 'radian') in unit of Radian
+        self.tor2_mean = self.cal_dihedral_mean(self.tor2_ary, 'radian', 'radian') in unit of Radian
+        self.tor3_mean = self.cal_dihedral_mean(self.tor3_ary, 'radian', 'radian') in unit of Radian
         '''
         self.dist_ary = self.apply_fraction(np.array(self.six_para_df.iloc[:,0]))
         self.ang1_ary = self.apply_fraction(np.array(self.six_para_df.iloc[:,1]))
@@ -357,6 +364,12 @@ class Restrain_Data():
         self.tor1_ary = self.apply_fraction(np.array(self.six_para_df.iloc[:,3]))
         self.tor2_ary = self.apply_fraction(np.array(self.six_para_df.iloc[:,4]))
         self.tor3_ary = self.apply_fraction(np.array(self.six_para_df.iloc[:,5]))
+        self.dist_mean = self.dist_ary.mean() 
+        self.ang1_mean = self.ang1_ary.mean() 
+        self.ang2_mean = self.ang2_ary.mean() 
+        self.tor1_mean = self.cal_dihedral_mean(self.tor1_ary, 'radian', 'radian')
+        self.tor2_mean = self.cal_dihedral_mean(self.tor2_ary, 'radian', 'radian')
+        self.tor3_mean = self.cal_dihedral_mean(self.tor3_ary, 'radian', 'radian')
     
     def cal_dihedral_mean(self, tor_array, input_unit, output_unit):
         '''Calculate the mean of dihedral in degree.
@@ -448,8 +461,14 @@ class Restrain_Data():
         harm_ene = 1/2*k*(delta)**2
         return harm_ene
     
-    def calcene(self): 
+    def calcene(self, p=None): 
         '''Calculate the harmonic energy for six parameters and update the total restraint energy.
+        
+        Parameters
+        ----------
+        p: None or np.array
+            When p is None, use the trajectory means as equilbrium values for the six geometric parameters.
+            When p is a np.array, d_eq, a1_eq, a2_eq, t1_eq, t2_eq, t3_eq = p, d_eq, a1_eq, a2_eq, t1_eq, t2_eq, t3_eq is the determined equilbrium values for the r(DISTANCE ATOMS=lig1,rec1) in unit of nm, thetaA(ANGLE ATOMS=lig1,rec1,rec2), thetaB(ANGLE ATOMS=lig2,lig1,rec1) in unit of Radian, phiA(TORSION ATOMS=rec3,rec2,rec1,lig1) in unit of Radian, phiB(TORSION ATOMS=rec2,rec1,lig1,lig2) in unit of Radian and phiC(TORSION ATOMS=rec1,lig1,lig2,lig3) in unit of Radian.
         
         Generated or update properties
         ----------
@@ -460,16 +479,65 @@ class Restrain_Data():
         self.delta_u: np.array([])
             The np.array of the delta_U, whose unit is kb_T.
         '''
-        tor1_mean = self.cal_dihedral_mean(self.tor1_ary, 'radian', 'radian')
-        tor2_mean = self.cal_dihedral_mean(self.tor2_ary, 'radian', 'radian')
-        tor3_mean = self.cal_dihedral_mean(self.tor3_ary, 'radian', 'radian')
-        
-        self.ene_list = self.cal_harm_ene(self.dist_ary.mean()*10, self.dist_ary*10) + self.cal_harm_ene(self.ang1_ary.mean()/180.0*np.pi,self.ang1_ary/180.0*np.pi) + self.cal_harm_ene(self.ang2_ary.mean()/180.0*np.pi,self.ang2_ary/180.0*np.pi) + self.cal_harm_ene(tor1_mean, self.tor1_ary, dihedral=True) + self.cal_harm_ene(tor2_mean, self.tor3_ary, dihedral=True) + self.cal_harm_ene(tor3_mean, self.tor3_ary, dihedral=True) 
+        if p is None: 
+            self.ene_list = self.cal_harm_ene(self.dist_mean*10, self.dist_ary*10) + self.cal_harm_ene(self.ang1_mean,self.ang1_ary) + self.cal_harm_ene(self.ang2_mean,self.ang2_ary) + self.cal_harm_ene(self.tor1_mean, self.tor1_ary, dihedral=True) + self.cal_harm_ene(self.tor2_mean, self.tor2_ary, dihedral=True) + self.cal_harm_ene(self.tor3_mean, self.tor3_ary, dihedral=True) 
+        else:
+            d_eq, a1_eq, a2_eq, t1_eq, t2_eq, t3_eq = p
+            self.ene_list = self.cal_harm_ene(d_eq*10, self.dist_ary*10) + self.cal_harm_ene(a1_eq,self.ang1_ary) + self.cal_harm_ene(a2_eq,self.ang2_ary) + self.cal_harm_ene(t1_eq, self.tor1_ary, dihedral=True) + self.cal_harm_ene(t2_eq, self.tor2_ary, dihedral=True) + self.cal_harm_ene(t3_eq, self.tor3_ary, dihedral=True)
         self.delta_u = np.array(self.ene_list)/2.478
         exponential=np.exp(self.delta_u*(-1))
         expave=exponential.mean()
         self.ene=-2.478*np.log(expave)
+
+
+    def user_def_eqP_get_cost(self, p):
+        '''Use the user-define equilbrium values of the six geometric parameters to calculate RED-E function cost.
         
+        Parameters
+        ----------
+        p: None or np.array
+            When p is None, use the trajectory means as equilbrium values for the six geometric parameters.
+            When p is a np.array, d_eq, a1_eq, a2_eq, t1_eq, t2_eq, t3_eq = p, d_eq, a1_eq, a2_eq, t1_eq, t2_eq, t3_eq is the determined equilbrium values for the r(DISTANCE ATOMS=lig1,rec1) in unit of nm, thetaA(ANGLE ATOMS=lig1,rec1,rec2), thetaB(ANGLE ATOMS=lig2,lig1,rec1) in unit of Radian, phiA(TORSION ATOMS=rec3,rec2,rec1,lig1) in unit of Radian, phiB(TORSION ATOMS=rec2,rec1,lig1,lig2) in unit of Radian and phiC(TORSION ATOMS=rec1,lig1,lig2,lig3) in unit of Radian.
+        '''
+        self.calcene(p)
+        self.fit()
+        return self.fopt
+    
+    def user_def_eqP_get_dG(self, p):
+        '''Use the user-define equilbrium values of the six geometric parameters to calculate dG_forward.
+        
+        Parameters
+        ----------
+        p: None or np.array
+            When p is None, use the trajectory means as equilbrium values for the six geometric parameters.
+            When p is a np.array, d_eq, a1_eq, a2_eq, t1_eq, t2_eq, t3_eq = p, d_eq, a1_eq, a2_eq, t1_eq, t2_eq, t3_eq is the determined equilbrium values for the r(DISTANCE ATOMS=lig1,rec1) in unit of nm, thetaA(ANGLE ATOMS=lig1,rec1,rec2), thetaB(ANGLE ATOMS=lig2,lig1,rec1) in unit of Radian, phiA(TORSION ATOMS=rec3,rec2,rec1,lig1) in unit of Radian, phiB(TORSION ATOMS=rec2,rec1,lig1,lig2) in unit of Radian and phiC(TORSION ATOMS=rec1,lig1,lig2,lig3) in unit of Radian.
+        '''
+        self.calcene(p)
+        return self.ene
+
+    def opt_eqP(self, opt_cost_name='RED_E_cost'):
+        '''
+
+        Parameters
+        ----------
+        opt_cost_name: str
+            The name of the optimization cost type. If it is 'RED_E_cost', the objective is the RED-E function cost (self.fopt). If it is 'dG_forward', the cost is the dG_forward (self.ene).
+        '''
+        if opt_cost_name == 'RED_E_cost':
+            self.opt_eqP_RED_E_cost()
+        elif opt_cost_name == 'dG_forward':
+            self.opt_eqP_dG_forward()
+        else:
+            print('Unsupported opt_cost_name!')
+            sys.exit()
+    
+    def opt_eqP_RED_E_cost():
+        '''To optimize the equilbrium values of the six geometric parameters to minimize the RED-E function cost (self.fopt).
+        '''
+        p0 = np.array([self.dist_mean, self.ang1_mean, self.ang2_mean, self.tor1_mean, self.tor2_mean, self.tor3_mean])
+        eqP = minimize(self.user_def_eqP_get_cost, p0, )
+        self.eqP = eqP
+
     def fit(self):
         '''Fitting the self.ene_list by using RED function.
         
@@ -510,6 +578,7 @@ class Restrain_Data():
         '''
         self.calcene()
         self.fit()
+        self.eqP = np.array([self.dist_mean, self.ang1_mean, self.ang2_mean, self.tor1_mean, self.tor2_mean, self.tor3_mean])
     
     def get_min_ene_index(self):
         '''To get the index of the frame with minimal restrain energy. For the possible following extraction of this frame as input structure. 
@@ -524,6 +593,7 @@ class Restrain_Data():
         return index
 
     def echo_rest_txt(self, software='gromacs'):
+        dist_eq, ang1_eq, ang2_eq, tor1_eq, tor2_eq, tor3_eq = self.eqP # dist in unit of nm, angle or torsion in radian
         if software=='gromacs':
             res = self.restrain_group
             restr_str = '''
@@ -542,12 +612,12 @@ class Restrain_Data():
 {: >6d} {: <4d} {: <4d} {: <4d}    2     {: <7.2f} 0.0   {: <7.2f} 41.84
 {: >6d} {: <4d} {: <4d} {: <4d}    2     {: <7.2f} 0.0   {: <7.2f} 41.84
 {: >6d} {: <4d} {: <4d} {: <4d}    2     {: <7.2f} 0.0   {: <7.2f} 41.84
-'''.format(res[0], res[3], self.dist_ary.mean(), self.dist_ary.mean(),
-            res[1], res[0], res[3], self.ang2_ary.mean(), self.ang2_ary.mean(),
-            res[0], res[3], res[4], self.ang1_ary.mean(), self.ang1_ary.mean(),
-            res[2], res[1], res[0], res[3], self.cal_dihedral_mean(self.tor3_ary, 'radian', 'degree'), self.cal_dihedral_mean(self.tor3_ary, 'radian', 'degree'),
-            res[1], res[0], res[3], res[4], self.cal_dihedral_mean(self.tor2_ary, 'radian', 'degree'), self.cal_dihedral_mean(self.tor2_ary, 'radian', 'degree'),
-            res[0], res[3], res[4], res[5], self.cal_dihedral_mean(self.tor1_ary, 'radian', 'degree'), self.cal_dihedral_mean(self.tor1_ary, 'radian', 'degree'),
+'''.format(res[0], res[3], dist_eq, dist_eq,
+            res[1], res[0], res[3], ang2_eq/np.pi*180, ang2_eq/np.pi*180,
+            res[0], res[3], res[4], ang1_eq/np.pi*180, ang1_eq/np.pi*180,
+            res[2], res[1], res[0], res[3], tor3_eq/np.pi*180, tor3_eq/np.pi*180,
+            res[1], res[0], res[3], res[4], tor2_eq/np.pi*180, tor2_eq/np.pi*180,
+            res[0], res[3], res[4], res[5], tor1_eq/np.pi*180, tor1_eq/np.pi*180,
             )
             print(restr_str)
             return restr_str
@@ -555,12 +625,12 @@ class Restrain_Data():
             res = self.restrain_group
             rec_atoms = [res[5]-1, res[4]-1, res[3]-1]
             lig_atoms = [res[0]-1, res[1]-1, res[2]-1]
-            r = self.dist_ary.mean()*10
-            theta1 = self.ang1_ary.mean()
-            theta2 = self.ang2_ary.mean()
-            phi1 = self.cal_dihedral_mean(self.tor1_ary, 'radian', 'radian')
-            phi2 = self.cal_dihedral_mean(self.tor2_ary, 'radian', 'radian')
-            phi3 = self.cal_dihedral_mean(self.tor3_ary, 'radian', 'radian')
+            r = dist_eq*10
+            theta1 = ang1_eq
+            theta2 = ang2_eq
+            phi1 = tor1_eq
+            phi2 = tor2_eq
+            phi3 = tor3_eq
             
             restr_str = f'Best restraint scheme is following: rec_atoms:{rec_atoms}(started from 0), lig_atoms:{lig_atoms}(started from 0), r:{r}, theta1:{theta1}, theta2:{theta2}, phi1:{phi1}, phi2:{phi2}, phi3:{phi3}'
             print(restr_str)
@@ -574,16 +644,12 @@ class Restrain_Data():
         res_parm: <class 'RestraintParam'>
             The class storing all the information needed for the BoreschLike restraint. 
         '''
+        dist_eq, ang1_eq, ang2_eq, tor1_eq, tor2_eq, tor3_eq = self.eqP # dist in unit of nm, angle or torsion in radian
         res = self.restrain_group
         rec_atoms = [res[5]-1, res[4]-1, res[3]-1]
         lig_atoms = [res[0]-1, res[1]-1, res[2]-1]
-        r = self.dist_ary.mean()*10
-        theta1 = self.ang1_ary.mean()
-        theta2 = self.ang2_ary.mean()
-        phi1 = self.cal_dihedral_mean(self.tor1_ary, 'radian', 'radian')
-        phi2 = self.cal_dihedral_mean(self.tor2_ary, 'radian', 'radian')
-        phi3 = self.cal_dihedral_mean(self.tor3_ary, 'radian', 'radian')
-        res_parm = RestraintParam(rec_atoms,lig_atoms,r,theta1,theta2,phi1,phi2,phi3)
+        r = dist_eq*10
+        res_parm = RestraintParam(rec_atoms,lig_atoms,r,ang1_eq,ang2_eq,tor1_eq,tor2_eq,tor3_eq)
         return res_parm
 
 
