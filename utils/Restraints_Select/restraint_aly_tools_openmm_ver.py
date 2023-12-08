@@ -531,12 +531,19 @@ class Restrain_Data():
             print('Unsupported opt_cost_name!')
             sys.exit()
     
-    def opt_eqP_RED_E_cost():
+    def opt_eqP_RED_E_cost(self, ):
         '''To optimize the equilbrium values of the six geometric parameters to minimize the RED-E function cost (self.fopt).
         '''
         p0 = np.array([self.dist_mean, self.ang1_mean, self.ang2_mean, self.tor1_mean, self.tor2_mean, self.tor3_mean])
         eqP = minimize(self.user_def_eqP_get_cost, p0, )
-        self.eqP = eqP
+        self.eqP = eqP['x']
+    
+    def opt_eqP_dG_forward(self,):
+        '''To optimize the equilbrium values of the six geometric parameters to minimize the dG_forward (self.ene).
+        '''
+        p0 = np.array([self.dist_mean, self.ang1_mean, self.ang2_mean, self.tor1_mean, self.tor2_mean, self.tor3_mean])
+        eqP = minimize(self.user_def_eqP_get_dG, p0, )
+        self.eqP = eqP['x']
 
     def fit(self):
         '''Fitting the self.ene_list by using RED function.

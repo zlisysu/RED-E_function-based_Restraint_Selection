@@ -134,8 +134,9 @@ class Res_atom_select():
             The output_csv_file of first_simulation_df(which logs the potential energy values of the first state and the second state. (Other state's potential energy values are zero, may be questionable))
         '''
         all_should_be_sample_num = int(nsteps/sample_interval)
-        # print(f'nstep:{nsteps}, sample_interval:{sample_interval}, all_should_be_sample_num:{all_should_be_sample_num}')
+        print(f'nstep:{nsteps}, sample_interval:{sample_interval}, all_should_be_sample_num:{all_should_be_sample_num}')
         pass_arry_sample_num = arry.shape[0]
+        print(f'pass_arry_sample_num: {pass_arry_sample_num}')
         supp_zero_ary = np.zeros(all_should_be_sample_num-pass_arry_sample_num,)
         all_data_ary = np.concatenate([supp_zero_ary, arry])
         all_nan_ary = np.empty(all_should_be_sample_num,)
@@ -145,6 +146,7 @@ class Res_atom_select():
         simulation_lambda_types = list(lambdas_df.columns)
         simulation_lambda_types.insert(0, 'times(ps)')
         times_lambda_tuples = [(i*sample_interval*timestep/1000,)+tuple(simulation_lambda_values)  for i in range(0, all_should_be_sample_num)]
+        print(times_lambda_tuples )
         muti_idx = pd.MultiIndex.from_tuples(times_lambda_tuples, names=simulation_lambda_types)
         columns_ = [tuple(i[1]) for i in lambdas_df.iterrows()]
         zero_shape = np.zeros((all_should_be_sample_num, len(columns_)))
@@ -246,6 +248,8 @@ class Res_atom_select():
                     print('Six atoms used for restraints are :'+str(i.restrain_group)+ ', they are selected by third strategy.')
                     print('The cost function value is '+str(i.fopt))
         best=res.get_best_result()
+        self.best_res_Data_obj = best
+        self.all_res_data = res
         res_parm = best.get_res_parm_4_openmm()
         res_parm_format = RestraintParam(rec_atoms=res_parm.rec_atoms,lig_atoms=res_parm.lig_atoms,r=res_parm.r,theta1=res_parm.theta1,theta2=res_parm.theta2,phi1=res_parm.phi1,phi2=res_parm.phi2,phi3=res_parm.phi3)
         
